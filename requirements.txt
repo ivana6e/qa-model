@@ -1,0 +1,9 @@
+transformers
+numpy
+sentence-transformers
+faiss-cpu
+huggingface-hub
+accelerate
+torch
+datasets
+langchain
