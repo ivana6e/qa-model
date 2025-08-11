@@ -3,56 +3,84 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
-from langchain.docstore.document import Document
+from langchain.prompts import PromptTemplate
+from langchain_community.document_loaders import DirectoryLoader, TextLoader
 
 import warnings
-
-
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 # 1. Init multilingual embedding model
 embedding_model = HuggingFaceEmbeddings(
     model_name="BAAI/bge-m3",
-    model_kwargs={"device": "cpu"}  # change to "cuda" if GPU
+    model_kwargs={"device": "cpu"}
 )
 
-# 2. Create some Chinese-English documents
-docs = [
-    Document(page_content="The capital of France is Paris."),
-    Document(page_content="訂單狀態請至[首頁/商戶系統/訂單]查詢。"),
-    Document(page_content="Python 是一種高級程式語言。"),
-    Document(page_content="LangChain is useful for building LLM apps."),
-    Document(page_content="You can return products within 30 days of purchase with a receipt for a full refund."),
-    Document(page_content="Standard shipping takes 5-7 business days, while express shipping takes 2-3 business days."),
-    Document(page_content="To reset your device, hold the power button for 10 seconds until it restarts."),
-    Document(page_content="Our customer service is available 24/7 via chat or phone."),
-    Document(page_content="Opened items can be refunded within 15 days if they are in good condition."),
-]
+# 2. Your documents
+print('generate rag')
+loader = DirectoryLoader(
+    "docs",  # or "./docs_backup"
+    glob="**/*.md",
+    loader_cls=lambda path: TextLoader(path, encoding="utf-8"),
+    show_progress=True
+)
+docs = loader.load()
 
-# 3. Chunk documents
+# 3. Split documents
 splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=50)
 split_docs = splitter.split_documents(docs)
 
-# 4. Build FAISS retriever
+# 4. Create FAISS vector store
 vector_db = FAISS.from_documents(split_docs, embedding_model)
-retriever = vector_db.as_retriever()
+retriever = vector_db.as_retriever(
+    search_type="similarity",
+    search_kwargs={"k": 3}
+)
+print('generate rag done')
 
-# 5. Connect to local Ollama model (qwen or llama3)
-llm = OllamaLLM(model="qwen:7b-chat")  # you must have pulled it already
+# 5. Connect to local Ollama model
+print('connect llm')
+llm = OllamaLLM(
+    model="llama3",
+    base_url="http://localhost:11435"
+)
+# llm = OllamaLLM(model="gpt-oss")
 
-# 6. Build RAG pipeline
+# 6. MCP-style Prompt Template
+mcp_template = """
+你是一個客服助理，根據以下知識庫內容回答使用者問題。
+如果知識庫中沒有足夠資訊，請說「根據目前資訊無法回答」。
+若我是用繁體中文輸入問題，請用繁體中文回覆。
+
+【知識庫】
+{context}
+
+【問題】
+{question}
+
+【回答】
+""".strip()
+
+prompt = PromptTemplate(
+    input_variables=["context", "question"],
+    template=mcp_template,
+)
+
+# 7. Build RAG pipeline with MCP-style prompt
 qa = RetrievalQA.from_chain_type(
     llm=llm,
     retriever=retriever,
+    chain_type="stuff",
+    chain_type_kwargs={"prompt": prompt},
     return_source_documents=True
 )
+print('Connect LLM finished')
 
-# 7. Ask questions
+# 8. Ask questions
 while True:
     query = input("🔍 問題 / Question: ")
     if query.lower() in {"exit", "quit"}:
         break
-    result = qa.invoke(query)
+    result = qa.invoke({"query": query})
     print("\n📣 回答 / Answer:\n", result['result'])
     print("\n📚 來源 / Sources:\n", [doc.page_content for doc in result['source_documents']])
     print("\n------------------------------------------------------------------------------------\n")

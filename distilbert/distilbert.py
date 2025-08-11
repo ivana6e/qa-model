@@ -1,7 +1,7 @@
 from transformers import pipeline
 
 
-# cased: sensitive to capitalization, better for formal texts, names, technical docs
+# cased: sensitive to capitalization, better for formal texts, names, technical docs_backup
 # uncased: ignores capitalization, better for informal, chat, or social media-like text
 cased = pipeline("question-answering", model='distilbert/distilbert-base-cased-distilled-squad')
 uncased = pipeline("question-answering", model="distilbert/distilbert-base-uncased-distilled-squad")

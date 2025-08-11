@@ -1,3 +1,6 @@
+langchain-ollama
+langchain-huggingface
+langchain-community
 transformers
 numpy
 sentence-transformers
